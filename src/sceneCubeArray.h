@@ -21,9 +21,9 @@ struct SceneCubeArray {
 
     Vec3d getCamera() const {
         Vec3d camera{};
-        camera[0] = 4.0 * sin(_time * M_PI / 180.0);
-        camera[1] = 4.0 * sin(5e8 + 0.77 * _time * M_PI / 180.0);
-        camera[2] = 2.0 + 2.0 * cos(0.3 * _time * M_PI / 180.0);
+        camera[0] = 1.0 * sin(_time * M_PI / 180.0);
+        camera[1] = 1.0 * sin(5e8 + 0.77 * _time * M_PI / 180.0);
+        camera[2] = 1.0 + 2.0 * cos(0.3 * _time * M_PI / 180.0);
         return camera;
     }
 

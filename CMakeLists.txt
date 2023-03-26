@@ -8,11 +8,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Release)
+    set(CMAKE_BUILD_TYPE Debug)
 endif()
 
 set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wno-deprecated-copy -Wno-ignored-qualifiers -Wno-deprecated-enum-enum-conversion")
-set(CMAKE_CXX_FLAGS_DEBUG "-g -O1")
+set(CMAKE_CXX_FLAGS_DEBUG "-ggdb3 -O0")
 set(CMAKE_CXX_FLAGS_RELEASE "-g -O3 -DNDEBUG")
 
 set(PRJ_NAME "render")

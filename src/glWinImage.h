@@ -15,7 +15,6 @@
 
 class GlWinImage {
     using ImageType = Image<IMAGE_SIZE>;
-    using FrameType = Frame<ImageType>;
     auto POS(auto x, auto y) { return ImageType::POS(x, y); }
 
   public:
@@ -74,14 +73,11 @@ class GlWinImage {
         if (GLFW_PRESS == action) {
             if (key == 'Q')
                 mQuit = true;
-            /*
             if (key == 'P')
-                scene_.mPause = !scene_.mPause;
+                scene_._pause = !scene_._pause;
             if (key == ' ') {
-                std::cout << "\nRand Vals:" << std::endl;
-                scene_.rand();
+                scene_.step();
             }
-            */
         }
     }
 

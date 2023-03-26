@@ -1,44 +1,67 @@
 #pragma once
 
-#include <algorithm>
-#include <cstdarg>
 #include <stdint.h>
 #include <type_traits>
+#include <Eigen/Dense>
 
-struct Point16 {
-    int_fast16_t x;
-    int_fast16_t y;
-};
+using Vec2d = Eigen::Vector2d;
+using Vec3d = Eigen::Vector3d;
+using Vec4d = Eigen::Vector4d;
+using Mat3d = Eigen::Matrix3d;
 
-struct PointU16 {
-    uint_fast16_t x;
-    uint_fast16_t y;
-};
+// Calculates the distance from a point to a line
+double DistanceToLine(Vec3d const &line_point1, Vec3d const &line_point2) {
+    Vec3d line = line_point2 - line_point1;
+    double t = line_point1.dot(line) / line.norm();
+    if (t < 0) {
+        return line_point1.norm();
+    } else if (t > 1) {
+        return line_point2.norm();
+    } else {
+        Vec3d projection = line_point1 + t * line;
+        return projection.norm();
+    }
+}
 
-struct PointU8 {
-    uint_fast8_t x;
-    uint_fast8_t y;
-};
+Vec3d Normal(Vec3d const &p1, Vec3d const &p2, Vec3d const &p3) {
+    Vec3d cross = (p2 - p1).cross(p3 - p1);
+    return cross.normalized();
+}
 
-struct PointF {
-    float x;
-    float y;
+double NormToPoint(Vec3d const &t1, Vec3d const &t2, Vec3d const &t3, Vec3d const &p) {
+    // Calculate the normal of the triangle
+    Vec3d normal = Normal(t1, t2, t3);
+    Vec3d vecToP = (p - t1).normalized();
+    double facePoint = -normal.dot(vecToP);
+    return facePoint;
+}
+
+double ShortestDistance(Vec3d const &t1, Vec3d const &t2, Vec3d const &t3) {
+    // Calculate the normal of the triangle
+    Vec3d normal = Normal(t1, t2, t3);
+
+    // Calculate the distance from the point to the plane of the triangle
+    double d = normal.dot(t1);
+
+    // If the point is on the same side of the plane as the normal, the shortest
+    // distance is the distance from the point to the plane
+    if (d * normal.dot(t1) > 0) {
+        return std::abs(d);
+    }
+
+    // Otherwise, the shortest distance is the distance from the point to one of the edges or vertices of the triangle
+    return std::min({DistanceToLine(t1, t2), DistanceToLine(t2, t3), DistanceToLine(t3, t1), t1.norm(), t2.norm(), t3.norm()});
+}
+
+struct RenderVertex {
+    RenderVertex(Vec2d const& im, Vec2d const& tx) : imageCoord(im), textureCoord(tx) {}
+    Vec2d imageCoord;
+    Vec2d textureCoord;
 };
 
 uint_fast8_t lerp8(uint_fast8_t a, uint_fast8_t b, float progress) {
     // Cast to int, avoid horrible values when b-a is less than zero
     return a + (int_fast8_t)((int_fast8_t)b - (int_fast8_t)a) * progress;
-}
-
-// x=0,y=0 returns center of screen.
-// z=1: Normalized coordinates with screen (x==-1 is left, x==1 is right, etc.)
-// screenW_2 and screenH_2 are __half__ the screen size, and it's your job to pass in these numbers
-// because you're probably re-using them for several points on the other end :P
-// Assumes landscape orientation, so screenW_2 is greater than screenH_2.
-Point16 xyz2screen(float x, float y, float z, uint_fast16_t screenW_2, uint_fast16_t screenH_2) {
-    float invZ = 1.0f / z;
-
-    return Point16{(int_fast16_t)(screenW_2 + x * invZ * screenW_2), (int_fast16_t)(screenH_2 + y * invZ * screenH_2)};
 }
 
 static uint16_t color565(uint8_t r, uint8_t g, uint8_t b) { return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3); }
@@ -68,3 +91,4 @@ uint16_t lerpCol(uint16_t col1, uint16_t col2, float progress) {
 }
 
 template <typename T> T fract(T x) { return x - floor(x); }
+

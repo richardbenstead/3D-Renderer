@@ -1,36 +1,45 @@
 #pragma once
+
 #include "tuple"
 #include <array>
 #include <cmath>
+#include <Eigen/Dense>
 
 static constexpr uint16_t IMAGE_SIZE = 1200;
 
-struct XYPair {
-    XYPair operator*(const float f) const { return XYPair{x * f, y * f}; }
-    XYPair operator-(const XYPair &xy) const { return XYPair{x - xy.x, y - xy.y}; }
-    XYPair operator+(const XYPair &xy) const { return XYPair{x + xy.x, y + xy.y}; }
-    XYPair operator+=(const XYPair &xy) {
-        x += xy.x;
-        y += xy.y;
-        return *this;
-    }
-    float norm() const { return sqrt(x * x + y * y); }
-
-    float x{}, y{};
-};
-
-
 struct Pixel {
-    Pixel operator*(const float f) const { return Pixel{r * f, g * f, b * f}; }
-    Pixel operator+(const Pixel &pix) const { return Pixel{r + pix.r, g + pix.g, b + pix.b}; }
-    Pixel operator+=(const Pixel &pix) {
-        r += pix.r;
-        g += pix.g;
-        b += pix.b;
-        return *this;
+    Pixel() = default;
+    Pixel(Pixel const&) = default;
+    Pixel(float r, float g, float b) {
+        _dat[0] = r;
+        _dat[1] = g;
+        _dat[2] = b;
     }
-    float r{}, g{}, b{};
+
+
+    Pixel lerp(const Pixel& y, float w) const {
+        return Pixel(std::lerp(r(), y.r(), w),
+                    std::lerp(g(), y.g(), w),
+                    std::lerp(b(), y.b(), w));
+    }
+    Pixel operator*(float w) const {
+        return Pixel(r() * w, g()*w, b()*w);
+    }
+
+    float r() const { return _dat[0]; }
+    float g() const { return _dat[1]; }
+    float b() const { return _dat[2]; }
+
+    float _dat[3]={};
 };
+
+
+template<typename T>
+void swapIf(const bool pred, T& v1, T& v2) {
+    if (pred) {
+        std::swap(v1, v2);
+    }
+}
 
 template <int16_t GS> class Image {
   public:
@@ -40,26 +49,6 @@ template <int16_t GS> class Image {
 
     constexpr static int32_t POS(int16_t i, int16_t j) { return i + GRID_SIZE * j; };
     std::array<Pixel, ARR_SIZE> image{};
-};
-
-template <typename Image> class Frame {
-  public:
-    static constexpr int16_t VIEW_WIDTH{Image::GRID_SIZE};
-    static constexpr int16_t VIEW_HEIGHT{Image::GRID_SIZE};
-
-    void reset() {
-        mCentre = XYPair{0, 0};
-        mScale = XYPair(5, 5);
-    }
-
-    XYPair imageToWorld(int16_t x, int16_t y) {
-        float wx = (static_cast<float>(x) / static_cast<float>(VIEW_WIDTH) - 0.5) * mScale.x + mCentre.x;
-        float wy = (static_cast<float>(y) / static_cast<float>(VIEW_HEIGHT) - 0.5) * mScale.y + mCentre.y;
-        return XYPair(wx, wy);
-    }
-
-    XYPair mCentre{};
-    XYPair mScale{5, 5};
 };
 
 template <int16_t N = 256> class Palette {
@@ -111,4 +100,3 @@ inline float randf(float max) { return (rand() % (int)(max * 100)) / 100.0; };
 // random float centered on zero
 inline float randfc(float max) { return (rand() % (int)(max * 100)) / 100.0 - max / 2.0; };
 
-inline float clip(float x, float down, float up) { return std::max(down, std::min(up, x)); };
