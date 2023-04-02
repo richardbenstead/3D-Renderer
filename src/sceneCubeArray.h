@@ -1,6 +1,6 @@
 #pragma once
-#include <vector>
 #include "3dPrimitives.h"
+#include <vector>
 
 struct SceneCubeArray {
     SceneCubeArray() {
@@ -15,9 +15,7 @@ struct SceneCubeArray {
         objects_.push_back(new Cube({3, 3, 6}));
     }
 
-    void update() {
-        _time++;
-    }
+    void update() { _time++; }
 
     Vec3d getCamera() const {
         Vec3d camera{};
@@ -33,7 +31,8 @@ struct SceneCubeArray {
         for (Object *o : objects_) {
             o->update(_time);
             std::vector<Triangle> newTri = o->getTriangles(camera);
-            triangles.insert(triangles.end(), newTri.begin(), newTri.end());
+            triangles.insert(triangles.end(), std::make_move_iterator(newTri.begin()),
+                             std::make_move_iterator(newTri.end()));
         }
         return triangles;
     }

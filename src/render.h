@@ -1,32 +1,27 @@
 #pragma once
 #include "3dPrimitives.h"
-#include "MathUtil.h"
-#include "utils.h"
-#include <algorithm>
-#include <vector>
+#include "types.h"
 
 class Render {
   public:
     static void drawImage(auto &canvas, auto const &scene) {
-        canvas.fillScreen(0);
-
         std::vector<Triangle> triangles = scene.getTriangles();
-
-        auto sortByDist = [](Triangle const &t1, Triangle const &t2) { return t1.vertexDist[2] > t2.vertexDist[2]; };
-        std::sort(triangles.begin(), triangles.end(), sortByDist);
+        std::sort(triangles.begin(), triangles.end());
 
         // Draw the triangles
-        for (const Triangle &t : triangles) {
+        // canvas.fillScreen(colRGB(0,0,0));
+        canvas.fillFade(0, canvas.height() / 2, colRGB(0.8, 0.8, 0.9), colRGB(0.3, 0.3, 0.5));
+        canvas.fillFade(canvas.height() / 2, canvas.height(), colRGB(0.2, 0.2, 0.2), colRGB(0.6, 0.6, 0.6));
+        for (const Triangle &tri : triangles) {
             // the virtual screen -1->1 maps to the image
-            auto toScreen = [&](Vec2d const &p, Vec2d const &t) -> RenderVertex {
-                return {Vec2d{canvas.width() * (1 + p[0]) / 2.0, canvas.height() * (1 + p[1]) / 2.0}, t};
+            auto toScreen = [&](Vec2d const &point, Vec2d const &texCoord) -> RenderVertex {
+                return {Vec2i{canvas.width() * (1 + point[0]) / 2.0, canvas.height() * (1 + point[1]) / 2.0}, texCoord};
             };
 
-            RenderVertex rv1 = toScreen(t.p1, t.texCoords.col(0));
-            RenderVertex rv2 = toScreen(t.p2, t.texCoords.col(1));
-            RenderVertex rv3 = toScreen(t.p3, t.texCoords.col(2));
-
-            canvas.drawFilledTriangle(rv1, rv2, rv3, t.vertexDist, t.ts);
+            RenderVertex rv1 = toScreen(tri.p1, tri.texCoords.col(0));
+            RenderVertex rv2 = toScreen(tri.p2, tri.texCoords.col(1));
+            RenderVertex rv3 = toScreen(tri.p3, tri.texCoords.col(2));
+            canvas.drawFilledTriangle(rv1, rv2, rv3, tri.vertexDist, tri.shader);
         }
     }
 };
