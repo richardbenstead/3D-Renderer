@@ -17,7 +17,7 @@ struct BaryCentric {
         texCoords.col(2) = c.textureCoord;
     }
 
-    std::pair<Vec2d, double> ConvertImageToTextureDist(Vec2i const &p) const {
+    inline std::pair<Vec2d, double> ConvertImageToTextureDist(Vec2i const &p) const {
         Vec2i v2 = p - _a;
         double d20 = v2.cast<double>().dot(v0.cast<double>());
         double d21 = v2.cast<double>().dot(v1.cast<double>());

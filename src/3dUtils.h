@@ -20,10 +20,17 @@ Vec3d Normal(Vec3d const &p1, Vec3d const &p2, Vec3d const &p3) {
     return cross.normalized();
 }
 
-double NormToPoint(Vec3d const &t1, Vec3d const &t2, Vec3d const &t3, Vec3d const &p) {
+bool FacesCamera(Eigen::Matrix<double, 3, 3> const& points) {
     // Calculate the normal of the triangle
-    Vec3d normal = Normal(t1, t2, t3);
-    Vec3d vecToP = (p - t1).normalized();
+    Vec3d normal = Normal(points.col(0), points.col(1), points.col(2));
+    double d = normal.dot(points.col(0));
+    return d > 0;
+}
+
+double NormToPoint(Eigen::Matrix<double, 3, 3> const& points, Vec3d const &p) {
+    // Calculate the normal of the triangle
+    Vec3d normal = Normal(points.col(0), points.col(1), points.col(2));
+    Vec3d vecToP = (p - points.col(0)).normalized();
     double facePoint = -normal.dot(vecToP);
     return facePoint;
 }

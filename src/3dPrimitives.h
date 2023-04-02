@@ -1,7 +1,10 @@
 #pragma once
+#include <array>
+
 #include "3dUtils.h"
 #include "colRGB.h"
 #include "font.h"
+
 
 struct TextureShader {
     TextureShader(int val) : _val{val} {}
@@ -12,32 +15,25 @@ struct TextureShader {
         _baseCol = baseCol;
     }
 
-    colRGB GetValue(float x, float y, float dist) const {
-        double rv = rand() % 100;
+    inline colRGB GetValue(float x, float y, float dist) const {
+        // double rv = rand() % 100;
         // [[maybe_unused]] bool inCentre = sqrt(pow(x - 0.5, 2) + pow(y - 0.5, 2)) < 0.5;
         // [[maybe_unused]] colRGB basePix = colRGB(x + inCentre, y, rv / 20.0);
 
-        int xInd = std::clamp(static_cast<int>(x * 8), 0, 7);
-        int yInd = std::clamp(static_cast<int>(y * 8), 0, 7);
+        int xInd = static_cast<int>(x * 8) & 7;
+        int yInd = static_cast<int>(y * 8) & 7;
         bool pixelVal = (texture[_val][yInd] >> xInd) & 0b1;
-        float specular = pixelVal ? 0.5 : 0.0;
+        double specular = pixelVal ? 0.5 : 0.0;
 
         colRGB const base = !pixelVal ? _baseCol : colRGB(1, 1, 1);
         double fade = std::clamp(8.0f / ((dist * dist) - 10), 0.0f, 1.5f);
-        colRGB col = base * fade + colRGB{0.0005, 0.001, 0.001} * rv;
+        colRGB col = base * fade;
         return col.lerp(colRGB(1, 1, 1), std::min(1.0, specular * _specular));
     }
     double _specular{};
     int _val{};
     colRGB _baseCol;
 };
-
-bool FacesCamera(Vec3d t1, Vec3d t2, Vec3d t3) {
-    // Calculate the normal of the triangle
-    Vec3d normal = Normal(t1, t2, t3);
-    double d = normal.dot(t1);
-    return d > 0;
-}
 
 class Triangle {
   public:
@@ -47,9 +43,9 @@ class Triangle {
     Triangle(Triangle &&t2) = default;
     Triangle &operator=(Triangle &&t2) = default;
 
-    Triangle(Vec2d const &_p1, Vec2d const &_p2, Vec2d const &_p3, Eigen::Matrix<double, 2, 3> const &_texCoords,
+    Triangle(Eigen::Matrix<double, 2, 3> const& points, Eigen::Matrix<double, 2, 3> const &_texCoords,
              Vec3d const &_vertexDist, TextureShader const &_ts)
-        : p1(_p1), p2(_p2), p3(_p3), texCoords(_texCoords), vertexDist(_vertexDist), shader(_ts) {}
+        : p1(points.col(0)), p2(points.col(1)), p3(points.col(2)), texCoords(_texCoords), vertexDist(_vertexDist), shader(_ts) {}
 
     Vec2d p1{0, 0}, p2{0, 0}, p3{0, 0};
     Eigen::Matrix<double, 2, 3> texCoords = Eigen::Matrix<double, 2, 3>::Zero();
@@ -127,17 +123,13 @@ class Object {
         Eigen::Quaterniond q_x(Eigen::AngleAxisd(angles[0] * M_PI / 180.0, Eigen::Vector3d::UnitX()));
         Eigen::Quaterniond q_y(Eigen::AngleAxisd(angles[1] * M_PI / 180.0, Eigen::Vector3d::UnitY()));
         Eigen::Quaterniond q_z(Eigen::AngleAxisd(angles[2] * M_PI / 180.0, Eigen::Vector3d::UnitZ()));
-
-        // Rotate the vertices
         return (q_z * q_y * q_x).toRotationMatrix() * vertices;
     }
 };
 
 class Cube : public Object {
   public:
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     Cube(Vec3d const &centre) : Object(centre) {}
-    virtual ~Cube() {}
 
     static constexpr double arrVert[8][3] = {{-0.5, -0.5, -0.5}, {0.5, -0.5, -0.5}, {0.5, 0.5, -0.5}, {-0.5, 0.5, -0.5},
                                              {-0.5, -0.5, 0.5},  {0.5, -0.5, 0.5},  {0.5, 0.5, 0.5},  {-0.5, 0.5, 0.5}};
@@ -147,10 +139,12 @@ class Cube : public Object {
                             TextureShader{8}, TextureShader{9}, TextureShader{10}};
 
     int faceTexMap[6] = {1, 10, 3, 10, 4, 5};
+
     std::vector<Triangle> getTriangles(Vec3d const &camera) {
         // Rotate base vertices and offset from camera
         Eigen::Matrix<double, 3, 8> const vertices = Eigen::Matrix<double, 3, 8>::Map(arrVert[0]);
         Eigen::Matrix<double, 3, 8> const matPfc = rotate(vertices, _rotation).colwise() + (_centre - camera);
+        using TexCoords_t = Eigen::Matrix<double, 2, 3>;
 
         // project relative 3d coordinates to screen
         Eigen::Matrix<double, 2, 8> const projectedVertices =
@@ -161,27 +155,17 @@ class Cube : public Object {
         triangles.reserve(12);
 
         // Create the triangles that make up the cube
-        auto makeTri = [&](int const *arrVertexInd, Eigen::Matrix<double, 2, 3> const &texCoords, TextureShader &ts,
-                           colRGB const col) {
-            bool const facesCamera =
-                FacesCamera(matPfc.col(arrVertexInd[0]), matPfc.col(arrVertexInd[1]), matPfc.col(arrVertexInd[2]));
-
-            if (facesCamera) {
-                double const facesLight =
-                    std::max(0.0, NormToPoint(matPfc.col(arrVertexInd[0]), matPfc.col(arrVertexInd[1]),
-                                              matPfc.col(arrVertexInd[2]), {2, 2, 0}));
+        auto makeTri = [&](Vec3i const& arrVertInd, TexCoords_t const &texCoords, TextureShader &ts, colRGB const col) {
+            if (FacesCamera(matPfc(Eigen::all, {arrVertInd[0], arrVertInd[1], arrVertInd[2]}))) {
+                double const facesLight = std::max(0.0, NormToPoint(matPfc(Eigen::all, arrVertInd), {2, 2, 0}));
                 ts.setAttr(facesLight, col);
-                triangles.emplace_back(
-                    Triangle(projectedVertices.col(arrVertexInd[0]), projectedVertices.col(arrVertexInd[1]),
-                             projectedVertices.col(arrVertexInd[2]), texCoords,
-                             Vec3d{matPfc.col(arrVertexInd[0]).norm(), matPfc.col(arrVertexInd[1]).norm(),
-                                   matPfc.col(arrVertexInd[2]).norm()},
-                             ts));
+                triangles.emplace_back(Triangle(projectedVertices(Eigen::all, arrVertInd), texCoords,
+                            matPfc(Eigen::all, arrVertInd).colwise().norm(), ts));
             }
         };
 
-        auto const texCoords1 = (Eigen::Matrix<double, 2, 3>() << 0, 0, 1, 0, 1, 0).finished();
-        auto const texCoords2 = (Eigen::Matrix<double, 2, 3>() << 1, 1, 0, 1, 0, 1).finished();
+        TexCoords_t const texCoords1 = (TexCoords_t() << 0, 0, 1, 0, 1, 0).finished();
+        TexCoords_t const texCoords2 = (TexCoords_t() << 1, 1, 0, 1, 0, 1).finished();
         float low = 0.5f;
         float high = 0.9f;
         colRGB const colours[] = {colRGB(high, low, low),  colRGB(low, high, low),  colRGB(low, low, high),
@@ -192,8 +176,8 @@ class Cube : public Object {
                                                   {4, 0, 3}, {3, 7, 4}, {4, 5, 1}, {1, 0, 4}, {3, 2, 6}, {6, 7, 3}};
 
         for (int i = 0; i < 6; ++i) {
-            makeTri(vertexList[i * 2], texCoords1, ts[faceTexMap[i]], colours[i]);
-            makeTri(vertexList[i * 2 + 1], texCoords2, ts[faceTexMap[i]], colours[i]);
+            makeTri(Vec3i::Map(vertexList[i * 2]), texCoords1, ts[faceTexMap[i]], colours[i]);
+            makeTri(Vec3i::Map(vertexList[i * 2+1]), texCoords2, ts[faceTexMap[i]], colours[i]);
         }
 
         return triangles;

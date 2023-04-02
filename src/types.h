@@ -2,6 +2,7 @@
 #include <Eigen/Dense>
 
 using Vec2i = Eigen::Vector2i;
+using Vec3i = Eigen::Vector3i;
 using Vec2d = Eigen::Vector2d;
 using Vec3d = Eigen::Vector3d;
 using Vec4d = Eigen::Vector4d;
