@@ -1,7 +1,7 @@
 #pragma once
-#include <algorithm>
 #include "baryCentric.h"
 #include "colRGB.h"
+#include <algorithm>
 
 template <typename T> void swapIf(const bool pred, T &v1, T &v2) {
     if (pred) {
@@ -45,24 +45,32 @@ template <typename I> class Canvas {
         }
     }
 
-    template<typename TexShader>
+    template <typename TexShader>
     inline void drawFastTexturedHLine(int x, int x2, int y, BaryCentric const &bc, TexShader const &texShader) {
         swapIf(x2 < x, x2, x);
 
         if ((y >= 0) && (y < height()) && (x < width())) {
+            [[likely]];
             x = std::max(0, x);
             x2 = std::min(width(), x2);
 
             colRGB *ptr = &_image.image[x + y * height()];
-            for (; x <= x2; ++x, ++ptr) {
-                auto [tex, dist] = bc.ConvertImageToTextureDist({x, y});
-                *ptr = texShader.GetValue(tex[0], tex[1], dist);
+            Vec2f tex1, tex2;
+            float dist1, dist2;
+            std::tie(tex1, dist1) = bc.ConvertImageToTextureDist({x, y});
+            std::tie(tex2, dist2) = bc.ConvertImageToTextureDist({x2, y});
+            Vec2f mTex = (tex2-tex1) / static_cast<float>(x2-x);
+            float mDist = (dist2-dist1) / static_cast<float>(x2-x);
+            int i=0;
+            for (; x <= x2; ++x, ++ptr, ++i) {
+                Vec2f tex = tex1 + i * mTex;
+                *ptr = texShader.GetValue(tex[0], tex[1], dist1+i*mDist);
             }
         }
     }
 
-    template<typename TexShader>
-    inline void drawFilledTriangle(RenderVertex &v0, RenderVertex &v1, RenderVertex &v2, Vec3d const &vertexDist,
+    template <typename TexShader>
+    inline void drawFilledTriangle(RenderVertex &v0, RenderVertex &v1, RenderVertex &v2, Vec3f const &vertexDist,
                                    TexShader const &texShader) {
         // get the barycentric mapping function
         BaryCentric bc(v0, v1, v2, vertexDist);

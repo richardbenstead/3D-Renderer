@@ -14,7 +14,7 @@ class Render {
         canvas.fillFade(canvas.height() / 2, canvas.height(), colRGB(0.2, 0.2, 0.2), colRGB(0.6, 0.6, 0.6));
         for (const Triangle &tri : triangles) {
             // the virtual screen -1->1 maps to the image
-            auto toScreen = [&](Vec2d const &point, Vec2d const &texCoord) -> RenderVertex {
+            auto toScreen = [&](Vec2f const &point, Vec2f const &texCoord) -> RenderVertex {
                 return {Vec2i{canvas.width() * (1 + point[0]) / 2.0, canvas.height() * (1 + point[1]) / 2.0}, texCoord};
             };
 

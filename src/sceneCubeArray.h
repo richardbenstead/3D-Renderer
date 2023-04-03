@@ -17,8 +17,8 @@ struct SceneCubeArray {
 
     void update() { _time++; }
 
-    Vec3d getCamera() const {
-        Vec3d camera{};
+    Vec3f getCamera() const {
+        Vec3f camera{};
         camera[0] = 1.0 * sin(_time * M_PI / 180.0);
         camera[1] = 1.0 * sin(5e8 + 0.77 * _time * M_PI / 180.0);
         camera[2] = 1.0 + 2.0 * cos(0.3 * _time * M_PI / 180.0);
@@ -26,7 +26,7 @@ struct SceneCubeArray {
     }
 
     std::vector<Triangle> getTriangles() const {
-        Vec3d camera = getCamera();
+        Vec3f camera = getCamera();
         std::vector<Triangle> triangles;
         for (Object *o : objects_) {
             o->update(_time);

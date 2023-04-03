@@ -12,7 +12,7 @@ inline float randfc(float max) { return (rand() % (int)(max * 100)) / 100.0 - ma
 
 struct SceneClock {
     SceneClock() {
-        auto addCube = [&](Vec3d const &centre) {
+        auto addCube = [&](Vec3f const &centre) {
             Cube *cube = new Cube(centre);
             cube->_targetRotation = {randf(360), randf(360), randf(360)};
             objects_.push_back(cube);
@@ -21,9 +21,9 @@ struct SceneClock {
         float x = -4;
         float sp = 1.1;
         for (int i = 0; i < 3; ++i) {
-            addCube(Vec3d{x, 0, 6});
+            addCube(Vec3f{x, 0, 6});
             x += sp;
-            addCube(Vec3d{x, 0, 6});
+            addCube(Vec3f{x, 0, 6});
             x += sp;
             x += 0.2;
         }
@@ -57,8 +57,8 @@ struct SceneClock {
 
     void step() {}
 
-    Vec3d getCamera() const {
-        Vec3d camera{};
+    Vec3f getCamera() const {
+        Vec3f camera{};
         camera[0] = 0.2 * sin(_time * M_PI / 180.0);
         camera[1] = 0.2 * sin(5e8 + 0.77 * _time * M_PI / 180.0);
         camera[2] = 1.5 + 0.2 * cos(0.3 * _time * M_PI / 180.0);
@@ -66,7 +66,7 @@ struct SceneClock {
     }
 
     std::vector<Triangle> getTriangles() const {
-        Vec3d camera = getCamera();
+        Vec3f camera = getCamera();
         std::vector<Triangle> triangles;
         for (Object *o : objects_) {
             std::vector<Triangle> newTri = o->getTriangles(camera);

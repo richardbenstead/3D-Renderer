@@ -7,6 +7,7 @@
 #include "render.h"
 #include "sceneClock.h"
 #include "sceneCubeArray.h"
+#include "sceneTileArray.h"
 
 static constexpr uint16_t IMAGE_SIZE = 1200;
 
@@ -94,19 +95,19 @@ class GlWinImage {
     GLFWwindow *mpWindow{};
     bool mQuit = false;
     Canvas<ImageType> canvas_;
+    SceneTileArray scene_;
     // SceneCubeArray scene_;
-    SceneClock scene_;
+    // SceneClock scene_;
 };
 
-
-int main(int, char**) {
+int main(int, char **) {
     // initialize GL
     if (!glfwInit()) {
         throw std::runtime_error("glfwInit failed");
     }
 
     // Create GL window and repeately update it
-    GlWinImage* winImage = new GlWinImage();
+    GlWinImage *winImage = new GlWinImage();
     winImage->initialize("3d Render");
     winImage->run();
     delete winImage;

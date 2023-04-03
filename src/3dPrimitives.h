@@ -5,32 +5,37 @@
 #include "colRGB.h"
 #include "font.h"
 
+static constexpr float low = 0.1f;
+static constexpr float high = 1.0;
 
 struct TextureShader {
     TextureShader(int val) : _val{val} {}
     static constexpr auto texture = bmNum;
 
-    void setAttr(double facesLight, colRGB baseCol) {
+    void setAttr(float facesLight, colRGB baseCol) {
         _specular = sqrt(facesLight / 2);
         _baseCol = baseCol;
     }
 
     inline colRGB GetValue(float x, float y, float dist) const {
-        // double rv = rand() % 100;
+        // float rv = rand() % 100;
         // [[maybe_unused]] bool inCentre = sqrt(pow(x - 0.5, 2) + pow(y - 0.5, 2)) < 0.5;
         // [[maybe_unused]] colRGB basePix = colRGB(x + inCentre, y, rv / 20.0);
 
-        int xInd = static_cast<int>(x * 8) & 7;
-        int yInd = static_cast<int>(y * 8) & 7;
-        bool pixelVal = (texture[_val][yInd] >> xInd) & 0b1;
-        double specular = pixelVal ? 0.5 : 0.0;
+        bool pixelVal=false;
+        if (_val > 0) {
+            int xInd = static_cast<int>(x * 8) & 7;
+            int yInd = static_cast<int>(y * 8) & 7;
+            pixelVal = (texture[_val][yInd] >> xInd) & 0b1;
+        }
+        float specular = pixelVal ? 0.5 : 0.0;
 
         colRGB const base = !pixelVal ? _baseCol : colRGB(1, 1, 1);
-        double fade = std::clamp(8.0f / ((dist * dist) - 10), 0.0f, 1.5f);
+        float fade = std::clamp(8.0f / ((dist * dist) - 10), 0.0f, 1.5f);
         colRGB col = base * fade;
-        return col.lerp(colRGB(1, 1, 1), std::min(1.0, specular * _specular));
+        return col.lerp(colRGB(1, 1, 1), std::min(1.0f, specular * _specular));
     }
-    double _specular{};
+    float _specular{};
     int _val{};
     colRGB _baseCol;
 };
@@ -43,13 +48,14 @@ class Triangle {
     Triangle(Triangle &&t2) = default;
     Triangle &operator=(Triangle &&t2) = default;
 
-    Triangle(Eigen::Matrix<double, 2, 3> const& points, Eigen::Matrix<double, 2, 3> const &_texCoords,
-             Vec3d const &_vertexDist, TextureShader const &_ts)
-        : p1(points.col(0)), p2(points.col(1)), p3(points.col(2)), texCoords(_texCoords), vertexDist(_vertexDist), shader(_ts) {}
+    Triangle(Eigen::Matrix<float, 2, 3> const &points, Eigen::Matrix<float, 2, 3> const &_texCoords,
+             Vec3f const &_vertexDist, TextureShader const &_ts)
+        : p1(points.col(0)), p2(points.col(1)), p3(points.col(2)), texCoords(_texCoords), vertexDist(_vertexDist),
+          shader(_ts) {}
 
-    Vec2d p1{0, 0}, p2{0, 0}, p3{0, 0};
-    Eigen::Matrix<double, 2, 3> texCoords = Eigen::Matrix<double, 2, 3>::Zero();
-    Vec3d vertexDist{-1, -1, -1};
+    Vec2f p1{0, 0}, p2{0, 0}, p3{0, 0};
+    Eigen::Matrix<float, 2, 3> texCoords = Eigen::Matrix<float, 2, 3>::Zero();
+    Vec3f vertexDist{-1, -1, -1};
     TextureShader shader{0};
 
     std::partial_ordering operator<=>(Triangle const &t2) {
@@ -80,31 +86,33 @@ class Triangle {
 
 class Object {
   public:
+    using TexCoords_t = Eigen::Matrix<float, 2, 3>;
     virtual ~Object() {}
     Object() = default;
     Object(Object &&) = delete;
     Object(Object const &) = delete;
 
-    Object(Vec3d const &centre) : _targetCentre(centre) {}
-    virtual std::vector<Triangle> getTriangles(Vec3d const &) = 0;
-    Vec3d _centre{0, 0, 10};
-    Vec3d _rotation{0, 0, 0};
-    Vec3d _targetRotation{0, 0, 0};
-    Vec3d _targetCentre{0, 0, 0};
-    Vec3d _velocity{0, 0, 0};
-    Vec3d _angularVelocity{0.3, 0.6, 10};
+    Object(Vec3f const &centre) : _targetCentre(centre) {}
+    virtual std::vector<Triangle> getTriangles(Vec3f const &) = 0;
+
+    Vec3f _centre{0, 0, 10};
+    Vec3f _rotation{0, 0, 0};
+    Vec3f _targetRotation{0, 0, 0};
+    Vec3f _targetCentre{0, 0, 0};
+    Vec3f _velocity{0, 0, 0};
+    Vec3f _angularVelocity{0.3, 0.6, 10};
 
     void update([[maybe_unused]] uint32_t time) {
         _rotation += _angularVelocity;
         _angularVelocity += 0.1 * (_targetRotation - _rotation);
 
-        auto getRand = []() { return static_cast<float>(rand() % 10 - 5); };
-        _angularVelocity += Vec3d{getRand(), getRand(), getRand()} * 0.1;
+        // auto getRand = []() { return static_cast<float>(rand() % 10 - 5); };
+        // _angularVelocity += Vec3f{getRand(), getRand(), getRand()} * 0.1;
         _centre += _velocity;
         _velocity += 0.1 * (_targetCentre - _centre);
-        //_velocity += Vec3d{getRand(), getRand(), getRand()} * 0.001;
+        //_velocity += Vec3f{getRand(), getRand(), getRand()} * 0.001;
 
-        static constexpr double maxAngularSpeed{20};
+        static constexpr float maxAngularSpeed{20};
         _angularVelocity *= 0.90;
 
         if (_angularVelocity.norm() > maxAngularSpeed) {
@@ -112,77 +120,92 @@ class Object {
         }
 
         _velocity *= 0.95;
-        const double maxSpeed{0.2};
+        const float maxSpeed{0.2};
         if (_velocity.norm() > maxSpeed) {
             _velocity = _velocity.normalized() * maxSpeed;
         }
     }
 
   protected:
-    Eigen::MatrixXd rotate(const Eigen::MatrixXd &vertices, const Vec3d &angles) {
-        Eigen::Quaterniond q_x(Eigen::AngleAxisd(angles[0] * M_PI / 180.0, Eigen::Vector3d::UnitX()));
-        Eigen::Quaterniond q_y(Eigen::AngleAxisd(angles[1] * M_PI / 180.0, Eigen::Vector3d::UnitY()));
-        Eigen::Quaterniond q_z(Eigen::AngleAxisd(angles[2] * M_PI / 180.0, Eigen::Vector3d::UnitZ()));
+    Eigen::MatrixXf rotate(const Eigen::MatrixXf &vertices, const Vec3f &angles) {
+        Eigen::Quaternionf q_x(Eigen::AngleAxisf(angles[0] * M_PI / 180.0, Eigen::Vector3f::UnitX()));
+        Eigen::Quaternionf q_y(Eigen::AngleAxisf(angles[1] * M_PI / 180.0, Eigen::Vector3f::UnitY()));
+        Eigen::Quaternionf q_z(Eigen::AngleAxisf(angles[2] * M_PI / 180.0, Eigen::Vector3f::UnitZ()));
         return (q_z * q_y * q_x).toRotationMatrix() * vertices;
     }
 };
 
-class Cube : public Object {
+template <typename Mesh> class MeshObject : public Object {
   public:
-    Cube(Vec3d const &centre) : Object(centre) {}
-
-    static constexpr double arrVert[8][3] = {{-0.5, -0.5, -0.5}, {0.5, -0.5, -0.5}, {0.5, 0.5, -0.5}, {-0.5, 0.5, -0.5},
-                                             {-0.5, -0.5, 0.5},  {0.5, -0.5, 0.5},  {0.5, 0.5, 0.5},  {-0.5, 0.5, 0.5}};
-
-    TextureShader ts[11] = {TextureShader{0}, TextureShader{1}, TextureShader{2}, TextureShader{3},
-                            TextureShader{4}, TextureShader{5}, TextureShader{6}, TextureShader{7},
-                            TextureShader{8}, TextureShader{9}, TextureShader{10}};
-
-    int faceTexMap[6] = {1, 10, 3, 10, 4, 5};
-
-    std::vector<Triangle> getTriangles(Vec3d const &camera) {
-        // Rotate base vertices and offset from camera
-        Eigen::Matrix<double, 3, 8> const vertices = Eigen::Matrix<double, 3, 8>::Map(arrVert[0]);
-        Eigen::Matrix<double, 3, 8> const matPfc = rotate(vertices, _rotation).colwise() + (_centre - camera);
-        using TexCoords_t = Eigen::Matrix<double, 2, 3>;
+    MeshObject(Vec3f const &centre) : Object(centre) {}
+    std::vector<Triangle> getTriangles(Vec3f const &camera) {
+        auto [matPfc, faces, tsInd, texCoord, arrTextureShaders, colours] = static_cast<Mesh *>(this)->getMesh(camera);
 
         // project relative 3d coordinates to screen
-        Eigen::Matrix<double, 2, 8> const projectedVertices =
-            (Eigen::Matrix<double, 2, 3>() << 0.6, 0, 0, 0, 1, 0).finished() * matPfc *
-            Eigen::DiagonalMatrix<double, 8>{matPfc.row(2)}.inverse();
+        Eigen::DiagonalMatrix<float, Mesh::NUM_VERTICES> diagDist{matPfc.row(2)};
+        Eigen::Matrix<float, 2, Mesh::NUM_VERTICES> const projectedVertices =
+            (Eigen::Matrix<float, 2, 3>() << 1, 0, 0, 0, 1, 0).finished() * matPfc * diagDist.inverse();
 
         std::vector<Triangle> triangles;
-        triangles.reserve(12);
+        triangles.reserve(Mesh::NUM_FACES);
+        for (int i = 0; i < Mesh::NUM_FACES; ++i) {
+            Vec3i arrVertInd = Vec3i::Map(faces[i]);
+            TexCoords_t const &texCoords = texCoord[i];
+            TextureShader &ts = arrTextureShaders[tsInd[i]];
+            colRGB col = colours[i];
 
-        // Create the triangles that make up the cube
-        auto makeTri = [&](Vec3i const& arrVertInd, TexCoords_t const &texCoords, TextureShader &ts, colRGB const col) {
             if (FacesCamera(matPfc(Eigen::all, {arrVertInd[0], arrVertInd[1], arrVertInd[2]}))) {
-                double const facesLight = std::max(0.0, NormToPoint(matPfc(Eigen::all, arrVertInd), {2, 2, 0}));
+                float const facesLight = std::max(0.0f, NormToPoint(matPfc(Eigen::all, arrVertInd), {2, 2, 0}));
                 ts.setAttr(facesLight, col);
                 triangles.emplace_back(Triangle(projectedVertices(Eigen::all, arrVertInd), texCoords,
-                            matPfc(Eigen::all, arrVertInd).colwise().norm(), ts));
+                                                matPfc(Eigen::all, arrVertInd).colwise().norm(), ts));
             }
         };
 
-        TexCoords_t const texCoords1 = (TexCoords_t() << 0, 0, 1, 0, 1, 0).finished();
-        TexCoords_t const texCoords2 = (TexCoords_t() << 1, 1, 0, 1, 0, 1).finished();
-        float low = 0.5f;
-        float high = 0.9f;
-        colRGB const colours[] = {colRGB(high, low, low),  colRGB(low, high, low),  colRGB(low, low, high),
-                                  colRGB(high, high, low), colRGB(low, high, high), colRGB(high, low, high)};
-
-        // vertices triangles of faces of the cube
-        static constexpr int vertexList[12][3] = {{0, 1, 2}, {2, 3, 0}, {1, 5, 6}, {6, 2, 1}, {7, 6, 5}, {5, 4, 7},
-                                                  {4, 0, 3}, {3, 7, 4}, {4, 5, 1}, {1, 0, 4}, {3, 2, 6}, {6, 7, 3}};
-
-        for (int i = 0; i < 6; ++i) {
-            makeTri(Vec3i::Map(vertexList[i * 2]), texCoords1, ts[faceTexMap[i]], colours[i]);
-            makeTri(Vec3i::Map(vertexList[i * 2+1]), texCoords2, ts[faceTexMap[i]], colours[i]);
-        }
-
         return triangles;
     }
-    Vec3d const faceRotation[6] = {{0, 0, 0}, {0, 90, 0}, {180, 0, 0}, {0, 270, 0}, {90, 0, 0}, {270, 0, 0}};
+};
+
+class Cube : public MeshObject<Cube> {
+  public:
+    Cube(Vec3f const &centre) : MeshObject<Cube>(centre) {}
+    static constexpr int NUM_VERTICES{8}, NUM_FACES{12};
+    static constexpr float vertices[NUM_VERTICES][3] = {{-0.5, -0.5, -0.5}, {0.5, -0.5, -0.5}, {0.5, 0.5, -0.5},
+                                                        {-0.5, 0.5, -0.5},  {-0.5, -0.5, 0.5}, {0.5, -0.5, 0.5},
+                                                        {0.5, 0.5, 0.5},    {-0.5, 0.5, 0.5}};
+
+    static constexpr int faces[NUM_FACES][3] = {{0, 1, 2}, {2, 3, 0}, {1, 5, 6}, {6, 2, 1}, {7, 6, 5}, {5, 4, 7},
+                                                {4, 0, 3}, {3, 7, 4}, {4, 5, 1}, {1, 0, 4}, {3, 2, 6}, {6, 7, 3}};
+
+    colRGB const colours[NUM_FACES] = {colRGB(high, low, low),  colRGB(high, low, low),  colRGB(low, high, low),
+                                       colRGB(low, high, low),  colRGB(low, low, high),  colRGB(low, low, high),
+                                       colRGB(high, high, low), colRGB(high, high, low), colRGB(low, high, high),
+                                       colRGB(low, high, high), colRGB(high, low, high), colRGB(high, low, high)};
+
+    TextureShader arrTextureShaders[11] = {TextureShader{0}, TextureShader{1}, TextureShader{2}, TextureShader{3},
+                                           TextureShader{4}, TextureShader{5}, TextureShader{6}, TextureShader{7},
+                                           TextureShader{8}, TextureShader{9}, TextureShader{10}};
+
+    int faceTexMap[6] = {1, 10, 3, 10, 4, 5};
+    using matVertex = Eigen::Matrix<float, 3, NUM_VERTICES>;
+
+    inline auto getMesh(Vec3f const &camera) {
+        // Rotate base vertices and offset from camera
+        matVertex const matPfc = rotate(matVertex::Map(vertices[0]), _rotation).colwise() + (_centre - camera);
+
+        std::array<int, NUM_FACES> tsInd;
+        std::array<TexCoords_t, NUM_FACES> texCoord;
+        for (int i = 0; i < 6; ++i) {
+            tsInd[i * 2] = faceTexMap[i];
+            tsInd[i * 2 + 1] = faceTexMap[i];
+            texCoord[i * 2] = (TexCoords_t() << 0, 0, 1, 0, 1, 0).finished();
+            texCoord[i * 2 + 1] = (TexCoords_t() << 1, 1, 0, 1, 0, 1).finished();
+        }
+
+        return std::make_tuple(matPfc, faces, tsInd, texCoord, arrTextureShaders, colours);
+    };
+
+    Vec3f const faceRotation[6] = {{0, 0, 0}, {0, 90, 0}, {180, 0, 0}, {0, 270, 0}, {90, 0, 0}, {270, 0, 0}};
     static constexpr int oppFace[6] = {2, 3, 0, 1, 5, 4};
 
     void setTargetTex(int tex) {
@@ -199,4 +222,41 @@ class Cube : public Object {
         faceTexMap[_targetFace] = tex;
     }
     int _targetFace{};
+};
+
+class Tile : public MeshObject<Tile> {
+  public:
+    Tile(Vec3f const &centre) : MeshObject<Tile>(centre) {}
+
+    static constexpr int NUM_VERTICES{4};
+    static constexpr int NUM_FACES{4};
+    static constexpr float size = 0.2;
+    static constexpr float vertices[NUM_VERTICES][3] = {
+        {-size, -size, 0}, {size, -size, 0}, {size, size, 0}, {-size, size, 0}};
+    static constexpr int faces[NUM_FACES][3] = {{0, 1, 2}, {2, 3, 0}, {0, 3, 2}, {2, 1, 0}};
+    colRGB const colours[NUM_FACES] = {colRGB(high, low, low), colRGB(high, low, low), colRGB(low, high, low),
+                                       colRGB(low, high, low)};
+    static constexpr float faceRotation[2][3] = {{0, 0, 0}, {0, 180, 0}};
+    static constexpr int faceTexMap[2] = {10, 9};
+
+    TextureShader arrTextureShaders[1] = {TextureShader{-1}};
+
+    inline auto getMesh(Vec3f const &camera) {
+        // Rotate base vertices and offset from camera
+        using matVertex = Eigen::Matrix<float, 3, NUM_VERTICES>;
+        matVertex const matPfc = rotate(matVertex::Map(vertices[0]), _rotation).colwise() + (_centre - camera);
+
+        std::array<int, NUM_FACES> tsInd;
+        std::array<TexCoords_t, NUM_FACES> texCoord;
+        for (int i = 0; i < 2; ++i) {
+            tsInd[i * 2] = 0;
+            tsInd[i * 2 + 1] = 0;
+            texCoord[i * 2] = (TexCoords_t() << 0, 0, 1, 0, 1, 0).finished();
+            texCoord[i * 2 + 1] = (TexCoords_t() << 1, 1, 0, 1, 0, 1).finished();
+        }
+
+        return std::make_tuple(matPfc, faces, tsInd, texCoord, arrTextureShaders, colours);
+    };
+
+    void setTarget(int tex) { _targetRotation = Vec3f::Map(faceRotation[tex]); }
 };
