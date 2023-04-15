@@ -4,7 +4,7 @@
 #include <vector>
 
 struct SceneTileArray {
-    using TileType = Tile<BasicShader>;
+    using TileType = Tile;
     // TODO: set object size and random movement from here
     static constexpr int XSIZE=27;
     static constexpr int YSIZE=16;
