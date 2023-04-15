@@ -1,14 +1,40 @@
 #pragma once
 #include <array>
+#include <memory>
+#include <type_traits>
 
 #include "3dUtils.h"
 #include "colRGB.h"
 #include "font.h"
 
 static constexpr float low = 0.1f;
-static constexpr float high = 1.0;
+static constexpr float high = 1.0f;
 
-struct TextureShader {
+struct IShader {
+    virtual void setAttr(float facesLight, colRGB baseCol) = 0;
+    virtual colRGB GetValue([[maybe_unused]] float x, [[maybe_unused]] float y, float dist) const = 0;
+};
+
+struct BasicShader : public IShader {
+    BasicShader(int) {}
+    static constexpr auto texture = bmNum;
+
+    void setAttr(float facesLight, colRGB baseCol) {
+        _specular = sqrt(facesLight / 2);
+        _baseCol = baseCol;
+    }
+
+    colRGB GetValue([[maybe_unused]] float x, [[maybe_unused]] float y, float dist) const {
+        float specular = 0.5;
+        float fade = std::clamp(20.0f / ((dist * dist) - 50), 0.0f, 1.5f);
+        colRGB col = _baseCol * fade;
+        return col.lerp(colRGB(1, 1, 1), std::min(1.0f, specular * _specular));
+    }
+    float _specular{};
+    colRGB _baseCol;
+};
+
+struct TextureShader : public IShader {
     TextureShader(int val) : _val{val} {}
     static constexpr auto texture = bmNum;
 
@@ -17,7 +43,7 @@ struct TextureShader {
         _baseCol = baseCol;
     }
 
-    inline colRGB GetValue(float x, float y, float dist) const {
+    colRGB GetValue(float x, float y, float dist) const {
         // float rv = rand() % 100;
         // [[maybe_unused]] bool inCentre = sqrt(pow(x - 0.5, 2) + pow(y - 0.5, 2)) < 0.5;
         // [[maybe_unused]] colRGB basePix = colRGB(x + inCentre, y, rv / 20.0);
@@ -31,7 +57,8 @@ struct TextureShader {
         float specular = pixelVal ? 0.5 : 0.0;
 
         colRGB const base = !pixelVal ? _baseCol : colRGB(1, 1, 1);
-        float fade = std::clamp(8.0f / ((dist * dist) - 10), 0.0f, 1.5f);
+        float fade = std::clamp(20.0f / ((dist * dist) - 50), 0.0f, 1.5f);
+
         colRGB col = base * fade;
         return col.lerp(colRGB(1, 1, 1), std::min(1.0f, specular * _specular));
     }
@@ -49,14 +76,14 @@ class Triangle {
     Triangle &operator=(Triangle &&t2) = default;
 
     Triangle(Eigen::Matrix<float, 2, 3> const &points, Eigen::Matrix<float, 2, 3> const &_texCoords,
-             Vec3f const &_vertexDist, TextureShader const &_ts)
+             Vec3f const &_vertexDist, std::shared_ptr<IShader> &_ts)
         : p1(points.col(0)), p2(points.col(1)), p3(points.col(2)), texCoords(_texCoords), vertexDist(_vertexDist),
           shader(_ts) {}
 
     Vec2f p1{0, 0}, p2{0, 0}, p3{0, 0};
     Eigen::Matrix<float, 2, 3> texCoords = Eigen::Matrix<float, 2, 3>::Zero();
     Vec3f vertexDist{-1, -1, -1};
-    TextureShader shader{0};
+    std::shared_ptr<IShader> shader{0};
 
     std::partial_ordering operator<=>(Triangle const &t2) {
         int sumFurther = (vertexDist[0] > t2.vertexDist[0]) + (vertexDist[0] > t2.vertexDist[1]) +
@@ -151,14 +178,16 @@ template <typename Mesh> class MeshObject : public Object {
         for (int i = 0; i < Mesh::NUM_FACES; ++i) {
             Vec3i arrVertInd = Vec3i::Map(faces[i]);
             TexCoords_t const &texCoords = texCoord[i];
-            TextureShader &ts = arrTextureShaders[tsInd[i]];
+            using shaderType = std::remove_cvref_t<decltype(arrTextureShaders[0])>;
+            shaderType* thisShader = new shaderType(arrTextureShaders[tsInd[i]]); // copy shader to heap
+            std::shared_ptr<IShader> s(static_cast<IShader*>(thisShader));
             colRGB col = colours[i];
 
             if (FacesCamera(matPfc(Eigen::all, {arrVertInd[0], arrVertInd[1], arrVertInd[2]}))) {
                 float const facesLight = std::max(0.0f, NormToPoint(matPfc(Eigen::all, arrVertInd), {2, 2, 0}));
-                ts.setAttr(facesLight, col);
+                s->setAttr(facesLight, col);
                 triangles.emplace_back(Triangle(projectedVertices(Eigen::all, arrVertInd), texCoords,
-                                                matPfc(Eigen::all, arrVertInd).colwise().norm(), ts));
+                                                matPfc(Eigen::all, arrVertInd).colwise().norm(), s));
             }
         };
 
@@ -224,9 +253,10 @@ class Cube : public MeshObject<Cube> {
     int _targetFace{};
 };
 
-class Tile : public MeshObject<Tile> {
+template<typename Shader>
+class Tile : public MeshObject<Tile<Shader>> {
   public:
-    Tile(Vec3f const &centre) : MeshObject<Tile>(centre) {}
+    Tile(Vec3f const &centre) : MeshObject<Tile<Shader>>(centre) {}
 
     static constexpr int NUM_VERTICES{4};
     static constexpr int NUM_FACES{4};
@@ -239,24 +269,24 @@ class Tile : public MeshObject<Tile> {
     static constexpr float faceRotation[2][3] = {{0, 0, 0}, {0, 180, 0}};
     static constexpr int faceTexMap[2] = {10, 9};
 
-    TextureShader arrTextureShaders[1] = {TextureShader{-1}};
+    Shader arrTextureShaders[1] = {Shader{-1}};
 
     inline auto getMesh(Vec3f const &camera) {
         // Rotate base vertices and offset from camera
         using matVertex = Eigen::Matrix<float, 3, NUM_VERTICES>;
-        matVertex const matPfc = rotate(matVertex::Map(vertices[0]), _rotation).colwise() + (_centre - camera);
+        matVertex const matPfc = this->rotate(matVertex::Map(vertices[0]), this->_rotation).colwise() + (this->_centre - camera);
 
         std::array<int, NUM_FACES> tsInd;
-        std::array<TexCoords_t, NUM_FACES> texCoord;
+        std::array<Object::TexCoords_t, NUM_FACES> texCoord;
         for (int i = 0; i < 2; ++i) {
             tsInd[i * 2] = 0;
             tsInd[i * 2 + 1] = 0;
-            texCoord[i * 2] = (TexCoords_t() << 0, 0, 1, 0, 1, 0).finished();
-            texCoord[i * 2 + 1] = (TexCoords_t() << 1, 1, 0, 1, 0, 1).finished();
+            texCoord[i * 2] = (Object::TexCoords_t() << 0, 0, 1, 0, 1, 0).finished();
+            texCoord[i * 2 + 1] = (Object::TexCoords_t() << 1, 1, 0, 1, 0, 1).finished();
         }
 
         return std::make_tuple(matPfc, faces, tsInd, texCoord, arrTextureShaders, colours);
     };
 
-    void setTarget(int tex) { _targetRotation = Vec3f::Map(faceRotation[tex]); }
+    void setTarget(int tex) { this->_targetRotation = Vec3f::Map(faceRotation[tex]); }
 };

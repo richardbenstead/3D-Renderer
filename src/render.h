@@ -21,7 +21,7 @@ class Render {
             RenderVertex rv1 = toScreen(tri.p1, tri.texCoords.col(0));
             RenderVertex rv2 = toScreen(tri.p2, tri.texCoords.col(1));
             RenderVertex rv3 = toScreen(tri.p3, tri.texCoords.col(2));
-            canvas.drawFilledTriangle(rv1, rv2, rv3, tri.vertexDist, tri.shader);
+            canvas.drawFilledTriangle(rv1, rv2, rv3, tri.vertexDist, *tri.shader);
         }
     }
 };
