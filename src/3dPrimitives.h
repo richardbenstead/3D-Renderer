@@ -35,19 +35,17 @@ struct BasicShader : public IShader {
 };
 
 struct TextureShader : public IShader {
-    TextureShader(int val, colRGB col) : _val{val} , _baseCol(col) {}
+    TextureShader(int val, colRGB col) : _val{val}, _baseCol(col) {}
     static constexpr auto texture = bmNum;
 
-    void setAttr(float facesLight, [[maybe_unused]] bool facesCamera) {
-        _specular = sqrt(facesLight / 2);
-    }
+    void setAttr(float facesLight, [[maybe_unused]] bool facesCamera) { _specular = sqrt(facesLight / 2); }
 
     colRGB GetValue(float x, float y, float dist) const {
         // float rv = rand() % 100;
         // [[maybe_unused]] bool inCentre = sqrt(pow(x - 0.5, 2) + pow(y - 0.5, 2)) < 0.5;
         // [[maybe_unused]] colRGB basePix = colRGB(x + inCentre, y, rv / 20.0);
 
-        bool pixelVal=false;
+        bool pixelVal = false;
         if (_val > 0) {
             int xInd = static_cast<int>(x * 8) & 7;
             int yInd = static_cast<int>(y * 8) & 7;
@@ -178,16 +176,16 @@ template <typename Mesh> class MeshObject : public Object {
             Vec3i arrVertInd = Vec3i::Map(faces[i]);
             TexCoords_t const &texCoords = texCoord[i];
             using shaderType = std::remove_cvref_t<decltype(arrTextureShaders[0])>;
-            shaderType* thisShader = new shaderType(arrTextureShaders[tsInd[i]]); // copy shader to heap
-            std::shared_ptr<IShader> s(static_cast<IShader*>(thisShader));
+            shaderType *thisShader = new shaderType(arrTextureShaders[tsInd[i]]); // copy shader to heap
+            std::shared_ptr<IShader> s(static_cast<IShader *>(thisShader));
 
             bool faceCamera = FacesCamera(matPfc(Eigen::all, {arrVertInd[0], arrVertInd[1], arrVertInd[2]}));
 
-            //TODO: check if shader wants to omit render if we don't face camera
+            // TODO: check if shader wants to omit render if we don't face camera
             float const facesLight = std::max(0.0f, NormToPoint(matPfc(Eigen::all, arrVertInd), {2, 2, 0}));
             s->setAttr(facesLight, faceCamera);
             triangles.emplace_back(Triangle(projectedVertices(Eigen::all, arrVertInd), texCoords,
-                                                matPfc(Eigen::all, arrVertInd).colwise().norm(), s));
+                                            matPfc(Eigen::all, arrVertInd).colwise().norm(), s));
         };
 
         return triangles;
@@ -205,17 +203,13 @@ class Cube : public MeshObject<Cube> {
     static constexpr int faces[NUM_FACES][3] = {{0, 1, 2}, {2, 3, 0}, {1, 5, 6}, {6, 2, 1}, {7, 6, 5}, {5, 4, 7},
                                                 {4, 0, 3}, {3, 7, 4}, {4, 5, 1}, {1, 0, 4}, {3, 2, 6}, {6, 7, 3}};
 
-    TextureShader arrTextureShaders[11] = {TextureShader{0, colRGB(high, low, low)},
-                                            TextureShader{1, colRGB(high, low, low)},
-                                            TextureShader{2, colRGB(low, high, low)},
-                                            TextureShader{3, colRGB(low, low, high)},
-                                            TextureShader{4, colRGB(high, low, high)},
-                                            TextureShader{5, colRGB(high, high, low)},
-                                            TextureShader{6, colRGB(low, high, high)},
-                                            TextureShader{7, colRGB(high, low, high)},
-                                            TextureShader{8, colRGB(high, high, low)},
-                                            TextureShader{9, colRGB(high, low, low)},
-                                            TextureShader{10, colRGB(low, high, low)}};
+    TextureShader arrTextureShaders[11] = {
+        TextureShader{0, colRGB(high, low, low)},  TextureShader{1, colRGB(high, low, low)},
+        TextureShader{2, colRGB(low, high, low)},  TextureShader{3, colRGB(low, low, high)},
+        TextureShader{4, colRGB(high, low, high)}, TextureShader{5, colRGB(high, high, low)},
+        TextureShader{6, colRGB(low, high, high)}, TextureShader{7, colRGB(high, low, high)},
+        TextureShader{8, colRGB(high, high, low)}, TextureShader{9, colRGB(high, low, low)},
+        TextureShader{10, colRGB(low, high, low)}};
 
     int faceTexMap[6] = {1, 10, 3, 10, 4, 5};
     using matVertex = Eigen::Matrix<float, 3, NUM_VERTICES>;
@@ -262,7 +256,8 @@ class Tile : public MeshObject<Tile> {
     static constexpr int NUM_VERTICES{4};
     static constexpr int NUM_FACES{2};
     static constexpr float size = 0.2;
-    static constexpr float vertices[NUM_VERTICES][3] = {{-size, -size, 0}, {size, -size, 0}, {size, size, 0}, {-size, size, 0}};
+    static constexpr float vertices[NUM_VERTICES][3] = {
+        {-size, -size, 0}, {size, -size, 0}, {size, size, 0}, {-size, size, 0}};
     static constexpr int faces[NUM_FACES][3] = {{0, 1, 2}, {2, 3, 0}};
     static constexpr float faceRotation[2][3] = {{0, 0, 0}, {0, 180, 0}};
 
@@ -271,7 +266,8 @@ class Tile : public MeshObject<Tile> {
     inline auto getMesh(Vec3f const &camera) {
         // Rotate base vertices and offset from camera
         using matVertex = Eigen::Matrix<float, 3, NUM_VERTICES>;
-        matVertex const matPfc = this->rotate(matVertex::Map(vertices[0]), this->_rotation).colwise() + (this->_centre - camera);
+        matVertex const matPfc =
+            this->rotate(matVertex::Map(vertices[0]), this->_rotation).colwise() + (this->_centre - camera);
 
         std::array<int, NUM_FACES> tsInd;
         std::array<Object::TexCoords_t, NUM_FACES> texCoord;

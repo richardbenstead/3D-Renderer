@@ -1,6 +1,6 @@
 #pragma once
 
-// clang-format on
+// clang-format off
 static constexpr uint8_t bmNum[][8] = {
    {0b00000000,
     0b01111110,
@@ -162,4 +162,4 @@ static constexpr uint8_t bmNumThin[][5] = {
     0b0111,
     0b0001,
     0b0111}};
-// clang-format off
+// clang-format on

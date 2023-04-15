@@ -59,12 +59,12 @@ template <typename I> class Canvas {
             float dist1, dist2;
             std::tie(tex1, dist1) = bc.ConvertImageToTextureDist({x, y});
             std::tie(tex2, dist2) = bc.ConvertImageToTextureDist({x2, y});
-            Vec2f mTex = (tex2-tex1) / static_cast<float>(x2-x);
-            float mDist = (dist2-dist1) / static_cast<float>(x2-x);
-            int i=0;
+            Vec2f mTex = (tex2 - tex1) / static_cast<float>(x2 - x);
+            float mDist = (dist2 - dist1) / static_cast<float>(x2 - x);
+            int i = 0;
             for (; x <= x2; ++x, ++ptr, ++i) {
                 Vec2f tex = tex1 + i * mTex;
-                *ptr = texShader.GetValue(tex[0], tex[1], dist1+i*mDist);
+                *ptr = texShader.GetValue(tex[0], tex[1], dist1 + i * mDist);
             }
         }
     }

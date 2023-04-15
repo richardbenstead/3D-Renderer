@@ -113,4 +113,3 @@ int main(int, char **) {
     delete winImage;
     return 0;
 }
-
