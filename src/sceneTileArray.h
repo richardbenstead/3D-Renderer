@@ -24,7 +24,9 @@ struct SceneTileArray {
 
     void setTile(int x, int y, int val) {
         int idx = x * YSIZE + y;
-        static_cast<TileType *>(objects_[idx])->setTarget(val);
+        TileType* tile = static_cast<TileType *>(objects_[idx]);
+        tile->setTarget(val);
+        tile->_targetCentre[2] = 10-0.5*val;
     }
 
     void drawNum(int x0, int y0, int val) {
@@ -38,6 +40,7 @@ struct SceneTileArray {
     }
 
     void update() {
+        _time++;
         auto now = std::chrono::system_clock::now();
         std::time_t current_time = std::chrono::system_clock::to_time_t(now);
 
@@ -63,22 +66,28 @@ struct SceneTileArray {
 
         drawNum(19, 1, second / 10);
         drawNum(23, 1, second % 10);
+
+        // TODO: add elasticity between tiles, including a rotation
+        // add some rare random impulses, like raindrops
     }
 
-    Vec3f getCamera() const {
-        Vec3f camera{};
-        camera[0] = 0.5 * sin(_time * M_PI / 180.0);
-        camera[1] = 0.5 * sin(5e8 + 0.77 * _time * M_PI / 180.0);
-        camera[2] = 1.0 + 1.0 * cos(0.3 * _time * M_PI / 180.0);
-        return camera;
+    
+    Camera getCamera() const {
+        Vec3f cameraPos{};
+        cameraPos[0] = 1.5 * sin(0.1 * _time * M_PI / 180.0);
+        cameraPos[1] = 1.5 * sin(5e8 + 0.2 * _time * M_PI / 180.0);
+        cameraPos[2] = 2;// + 0.0 * cos(0.3 * _time * M_PI / 180.0);
+
+        Vec3f orientation{-cameraPos[0], -cameraPos[1], 7};
+        return Camera{cameraPos, orientation};
     }
 
     std::vector<Triangle> getTriangles() const {
-        Vec3f camera = getCamera();
+        Camera cam = getCamera();
         std::vector<Triangle> triangles;
         for (Object *o : objects_) {
             o->update(_time);
-            std::vector<Triangle> newTri = o->getTriangles(camera);
+            std::vector<Triangle> newTri = o->getTriangles(cam);
             triangles.insert(triangles.end(), std::make_move_iterator(newTri.begin()),
                              std::make_move_iterator(newTri.end()));
         }

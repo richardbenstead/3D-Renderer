@@ -10,9 +10,26 @@
 static constexpr float low = 0.1f;
 static constexpr float high = 1.0f;
 
+class Camera {
+    public:
+        Camera(Vec3f const pos, Vec3f const orientation) :
+            position{pos},
+            counterRotation{[&]() {
+                Vec3f target(0, 0, 1);
+                Vec3f const v = orientation.normalized();
+                Vec3f const axis = v.cross(target);
+                float angle = std::acos(v.dot(target));
+                return Eigen::AngleAxisf(angle, axis);
+            }()}
+        {}
+
+    Vec3f const position;
+    Eigen::Matrix3f const counterRotation;
+};
+
 struct IShader {
     virtual void setAttr(float facesLight, bool facesCamera) = 0;
-    virtual colRGB GetValue([[maybe_unused]] float x, [[maybe_unused]] float y, float dist) const = 0;
+    virtual bool isTex() { return false; }
 };
 
 struct BasicShader : public IShader {
@@ -24,11 +41,30 @@ struct BasicShader : public IShader {
         _baseCol = facesCamera ? _col1 : _col2;
     }
 
-    colRGB GetValue([[maybe_unused]] float x, [[maybe_unused]] float y, float dist) const {
-        float specular = 0.5;
-        float fade = std::clamp(20.0f / ((dist * dist) - 50), 0.0f, 1.5f);
-        colRGB col = _baseCol * fade;
-        return col.lerp(colRGB(1, 1, 1), std::min(1.0f, specular * _specular));
+    inline void drawTexturedHLine(int x, int x2, int y, BaryCentric const &bc, auto& iter) const {
+        float const dist1 = bc.ConvertImageToDist({x, y});
+        if (x==x2) {
+            [[unlikely]];
+            iter.setVal(GetValue(dist1));
+        } else {
+            float const dist2 = bc.ConvertImageToDist({x2, y});
+            colRGB col1 = GetValue(dist1);
+            colRGB const col2 = GetValue(dist2);
+            colRGB mCol = (col2 - col1)/static_cast<float>(x2-x);
+
+            for (; x<=x2; ++iter, ++x) {
+                iter.setVal(col1);
+                col1 += mCol;
+            }
+        }
+    }
+
+    inline colRGB GetValue(float const dist) const {
+        constexpr float specular = 0.2;
+        float const fade = std::min(40.0f / (dist * dist + 0.1f), 1.5f);
+        colRGB const col = _baseCol * fade;
+        float const sVal = specular * _specular;
+        return col + colRGB(sVal, sVal, sVal);
     }
     float _specular{};
     colRGB _col1, _col2, _baseCol;
@@ -39,8 +75,9 @@ struct TextureShader : public IShader {
     static constexpr auto texture = bmNum;
 
     void setAttr(float facesLight, [[maybe_unused]] bool facesCamera) { _specular = sqrt(facesLight / 2); }
+    bool isTex() { return true; }
 
-    colRGB GetValue(float x, float y, float dist) const {
+    inline colRGB GetValue(float x, float y, float dist) const {
         // float rv = rand() % 100;
         // [[maybe_unused]] bool inCentre = sqrt(pow(x - 0.5, 2) + pow(y - 0.5, 2)) < 0.5;
         // [[maybe_unused]] colRGB basePix = colRGB(x + inCentre, y, rv / 20.0);
@@ -53,12 +90,34 @@ struct TextureShader : public IShader {
         }
         float specular = pixelVal ? 0.5 : 0.0;
 
-        colRGB const base = !pixelVal ? _baseCol : colRGB(1, 1, 1);
+        colRGB const base = !pixelVal ? _baseCol : colRGB(1.0f, 1.0f, 1.0f);
         float fade = std::clamp(20.0f / ((dist * dist) - 50), 0.0f, 1.5f);
 
         colRGB col = base * fade;
-        return col.lerp(colRGB(1, 1, 1), std::min(1.0f, specular * _specular));
+        float const sVal = specular * _specular;
+        return col + colRGB(sVal, sVal, sVal);
     }
+
+    inline void drawTexturedHLine(int x, int x2, int y, BaryCentric const &bc, auto& iter) const {
+        Vec2f tex1, tex2;
+        float dist1, dist2;
+        std::tie(tex1, dist1) = bc.ConvertImageToTextureDist({x, y});
+        if (x==x2) {
+            [[unlikely]];
+            iter.setVal(GetValue(tex1[0], tex1[1], dist1));
+        } else {
+            std::tie(tex2, dist2) = bc.ConvertImageToTextureDist({x2, y});
+            Vec2f mTex= (tex2 - tex1) / static_cast<float>(x2 - x);
+            float mDist = (dist2 - dist1) / static_cast<float>(x2 - x);
+
+            int i = 0;
+            for (; x <= x2; ++x, ++iter, ++i) {
+                Vec2f tex = tex1 + i * mTex;
+                iter.setVal(GetValue(tex[0], tex[1], dist1 + i * mDist));
+            }
+        }
+    }
+
     float _specular{};
     int _val{};
     colRGB _baseCol;
@@ -117,7 +176,7 @@ class Object {
     Object(Object const &) = delete;
 
     Object(Vec3f const &centre) : _targetCentre(centre) {}
-    virtual std::vector<Triangle> getTriangles(Vec3f const &) = 0;
+    virtual std::vector<Triangle> getTriangles(Camera const &) = 0;
 
     Vec3f _centre{0, 0, 10};
     Vec3f _rotation{0, 0, 0};
@@ -130,21 +189,21 @@ class Object {
         _rotation += _angularVelocity;
         _angularVelocity += 0.1 * (_targetRotation - _rotation);
 
-        // auto getRand = []() { return static_cast<float>(rand() % 10 - 5); };
-        // _angularVelocity += Vec3f{getRand(), getRand(), getRand()} * 0.1;
+        auto getRand = []() { return static_cast<float>(rand() % 10 - 5); };
+        _angularVelocity += Vec3f{getRand(), getRand(), getRand()} * 0.1;
         _centre += _velocity;
         _velocity += 0.1 * (_targetCentre - _centre);
-        //_velocity += Vec3f{getRand(), getRand(), getRand()} * 0.001;
+        // _velocity += Vec3f{getRand(), getRand(), getRand()} * 0.0001;
 
-        static constexpr float maxAngularSpeed{20};
-        _angularVelocity *= 0.90;
+        static constexpr float maxAngularSpeed{30};
+        _angularVelocity *= 0.80;
 
         if (_angularVelocity.norm() > maxAngularSpeed) {
             _angularVelocity = _angularVelocity.normalized() * maxAngularSpeed;
         }
 
-        _velocity *= 0.95;
-        const float maxSpeed{0.2};
+        _velocity *= 0.8;
+        const float maxSpeed{0.3};
         if (_velocity.norm() > maxSpeed) {
             _velocity = _velocity.normalized() * maxSpeed;
         }
@@ -159,11 +218,13 @@ class Object {
     }
 };
 
+// 3D mesh of triangles. Base class for tile and cube
 template <typename Mesh> class MeshObject : public Object {
   public:
     MeshObject(Vec3f const &centre) : Object(centre) {}
-    std::vector<Triangle> getTriangles(Vec3f const &camera) {
+    std::vector<Triangle> getTriangles(Camera const &camera) {
         auto [matPfc, faces, tsInd, texCoord, arrTextureShaders] = static_cast<Mesh *>(this)->getMesh(camera);
+        using shaderType = std::remove_cvref_t<decltype(arrTextureShaders[0])>;
 
         // project relative 3d coordinates to screen
         Eigen::DiagonalMatrix<float, Mesh::NUM_VERTICES> diagDist{matPfc.row(2)};
@@ -175,17 +236,15 @@ template <typename Mesh> class MeshObject : public Object {
         for (int i = 0; i < Mesh::NUM_FACES; ++i) {
             Vec3i arrVertInd = Vec3i::Map(faces[i]);
             TexCoords_t const &texCoords = texCoord[i];
-            using shaderType = std::remove_cvref_t<decltype(arrTextureShaders[0])>;
-            shaderType *thisShader = new shaderType(arrTextureShaders[tsInd[i]]); // copy shader to heap
-            std::shared_ptr<IShader> s(static_cast<IShader *>(thisShader));
-
-            bool faceCamera = FacesCamera(matPfc(Eigen::all, {arrVertInd[0], arrVertInd[1], arrVertInd[2]}));
 
             // TODO: check if shader wants to omit render if we don't face camera
+            bool const facesCamera = FacesCamera(matPfc(Eigen::all, {arrVertInd[0], arrVertInd[1], arrVertInd[2]}));
             float const facesLight = std::max(0.0f, NormToPoint(matPfc(Eigen::all, arrVertInd), {2, 2, 0}));
-            s->setAttr(facesLight, faceCamera);
+            shaderType *pShader = new shaderType(arrTextureShaders[tsInd[i]]); // copy shader to heap
+            std::shared_ptr<IShader> shader(static_cast<IShader *>(pShader));
+            shader->setAttr(facesLight, facesCamera);
             triangles.emplace_back(Triangle(projectedVertices(Eigen::all, arrVertInd), texCoords,
-                                            matPfc(Eigen::all, arrVertInd).colwise().norm(), s));
+                                            matPfc(Eigen::all, arrVertInd).colwise().norm(), shader));
         };
 
         return triangles;
@@ -214,9 +273,9 @@ class Cube : public MeshObject<Cube> {
     int faceTexMap[6] = {1, 10, 3, 10, 4, 5};
     using matVertex = Eigen::Matrix<float, 3, NUM_VERTICES>;
 
-    inline auto getMesh(Vec3f const &camera) {
+    inline auto getMesh(Camera const &camera) {
         // Rotate base vertices and offset from camera
-        matVertex const matPfc = rotate(matVertex::Map(vertices[0]), _rotation).colwise() + (_centre - camera);
+        matVertex const matPfc = rotate(matVertex::Map(vertices[0]), _rotation).colwise() + (_centre - camera.position);
 
         std::array<int, NUM_FACES> tsInd;
         std::array<TexCoords_t, NUM_FACES> texCoord;
@@ -263,14 +322,15 @@ class Tile : public MeshObject<Tile> {
 
     BasicShader arrTextureShaders[1] = {BasicShader{colRGB{high, low, low}, colRGB{low, high, low}}};
 
-    inline auto getMesh(Vec3f const &camera) {
+    inline auto getMesh(Camera const &camera) {
         // Rotate base vertices and offset from camera
         using matVertex = Eigen::Matrix<float, 3, NUM_VERTICES>;
+        
         matVertex const matPfc =
-            this->rotate(matVertex::Map(vertices[0]), this->_rotation).colwise() + (this->_centre - camera);
+            camera.counterRotation * (this->rotate(matVertex::Map(vertices[0]), this->_rotation).colwise() + (this->_centre - camera.position));
 
-        std::array<int, NUM_FACES> tsInd;
-        std::array<Object::TexCoords_t, NUM_FACES> texCoord;
+        std::array<int, NUM_FACES*2> tsInd;
+        std::array<Object::TexCoords_t, NUM_FACES*2> texCoord;
         for (int i = 0; i < 2; ++i) {
             tsInd[i * 2] = 0;
             tsInd[i * 2 + 1] = 0;

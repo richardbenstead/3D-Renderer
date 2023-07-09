@@ -17,16 +17,18 @@ struct SceneCubeArray {
 
     void update() { _time++; }
 
-    Vec3f getCamera() const {
-        Vec3f camera{};
-        camera[0] = 1.0 * sin(_time * M_PI / 180.0);
-        camera[1] = 1.0 * sin(5e8 + 0.77 * _time * M_PI / 180.0);
-        camera[2] = 1.0 + 2.0 * cos(0.3 * _time * M_PI / 180.0);
-        return camera;
+    Camera getCamera() const {
+        Vec3f cameraPos{};
+        cameraPos[0] = 1.0 * sin(_time * M_PI / 180.0);
+        cameraPos[1] = 1.0 * sin(5e8 + 0.77 * _time * M_PI / 180.0);
+        cameraPos[2] = 1.0 + 2.0 * cos(0.3 * _time * M_PI / 180.0);
+
+        Vec3f orientation{0,0,1};
+        return Camera{cameraPos, orientation};
     }
 
     std::vector<Triangle> getTriangles() const {
-        Vec3f camera = getCamera();
+        Camera camera = getCamera();
         std::vector<Triangle> triangles;
         for (Object *o : objects_) {
             o->update(_time);

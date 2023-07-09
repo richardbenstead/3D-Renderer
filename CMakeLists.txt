@@ -13,7 +13,7 @@ endif()
 
 set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wno-deprecated-copy -Wno-ignored-qualifiers -Wno-deprecated-enum-enum-conversion")
 set(CMAKE_CXX_FLAGS_DEBUG "-ggdb3 -O0")
-set(CMAKE_CXX_FLAGS_RELEASE "-g -O3 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "-g -O3 -flto -fno-rtti -fno-exceptions -DNDEBUG")
 
 set(PRJ_NAME "render")
 project(${PRJ_NAME})

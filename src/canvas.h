@@ -20,7 +20,7 @@ template <typename I> class Canvas {
     void fillFade(int startHeight, int endHeight, colRGB const &col1, colRGB const &col2) {
         colRGB *ptr = &_image.image[startHeight * width()];
         for (int i = startHeight; i < endHeight; ++i) {
-            std::fill(ptr, ptr + width(), col1.lerp(col2, float(i) / height()));
+            std::fill(ptr, ptr + width(), std::lerp(col1, col2, float(i) / height()));
             ptr += width();
         }
     }
@@ -46,26 +46,26 @@ template <typename I> class Canvas {
     }
 
     template <typename TexShader>
-    inline void drawFastTexturedHLine(int x, int x2, int y, BaryCentric const &bc, TexShader const &texShader) {
-        swapIf(x2 < x, x2, x);
-
-        if ((y >= 0) && (y < height()) && (x < width())) {
+    inline void drawTexturedHLine(int x, int x2, int y, BaryCentric const &bc, TexShader const &texShader) {
+        if ((y >= 0) & (y < height()) & (x < width()) & (x2 >= 0)) {
             [[likely]];
             x = std::max(0, x);
             x2 = std::min(width(), x2);
 
-            colRGB *ptr = &_image.image[x + y * height()];
-            Vec2f tex1, tex2;
-            float dist1, dist2;
-            std::tie(tex1, dist1) = bc.ConvertImageToTextureDist({x, y});
-            std::tie(tex2, dist2) = bc.ConvertImageToTextureDist({x2, y});
-            Vec2f mTex = (tex2 - tex1) / static_cast<float>(x2 - x);
-            float mDist = (dist2 - dist1) / static_cast<float>(x2 - x);
-            int i = 0;
-            for (; x <= x2; ++x, ++ptr, ++i) {
-                Vec2f tex = tex1 + i * mTex;
-                *ptr = texShader.GetValue(tex[0], tex[1], dist1 + i * mDist);
-            }
+            class Iter {
+                public:
+                    Iter(colRGB* c) : ptr(c) {}
+                    inline void operator++() {++ptr;}
+                    inline void setVal(colRGB c) {
+                        *ptr=c;
+                    }
+                private:
+                    colRGB* ptr;
+            };
+
+
+            Iter iter{&_image.image[x + y * height()]};
+            texShader.drawTexturedHLine(x, x2, y, bc, iter);
         }
     }
 
@@ -87,41 +87,53 @@ template <typename I> class Canvas {
         constexpr int16_t SCALE = 256;
 
         if (!v2v0y) {
-            drawFastTexturedHLine(std::min({v0.imageCoord.x(), v1.imageCoord.x(), v2.imageCoord.x()}),
+            [[unlikely]];
+            drawTexturedHLine(std::min({v0.imageCoord.x(), v1.imageCoord.x(), v2.imageCoord.x()}),
                                   std::max({v0.imageCoord.x(), v1.imageCoord.x(), v2.imageCoord.x()}),
                                   v0.imageCoord.y(), bc, texShader);
             return;
         }
 
-        // We draw any triangle in two parts, with a horizontal line that intersects point v1 (v0 at top and v2 at
-        // bottom)
+        // Triangles are drawn in two parts, with a horizontal line that intersects point v1 (v0 at top and v2 at bottom)
         int16_t m2 = ((v2.imageCoord.x() - v0.imageCoord.x()) * SCALE) / v2v0y;
         int16_t curx1, curx2, m1, b1 = 0;
         int16_t scanlineY = 0;
 
-        /*
-        std::cout << "v0.x: " << v0.imageCoord.x() << " v1.x: " << v1.imageCoord.x() << " v2.x: " << v2.imageCoord.x()
-        << std::endl; std::cout << "v0.y: " << v0.imageCoord.y() << " v1.y: " << v1.imageCoord.y() << " v2.y: " <<
-        v2.imageCoord.y() << std::endl; std::cout << "v0->v2 m: " << m2 << std::endl;
-        */
         if (v1v0y) {
+            [[likely]];
             m1 = ((v1.imageCoord.x() - v0.imageCoord.x()) * SCALE) / v1v0y;
-            // std::cout << "v0->v1 m: " << m1 << std::endl;
-            for (; scanlineY < v1v0y; scanlineY++) {
-                curx1 = v0.imageCoord.x() + (m1 * scanlineY) / SCALE + b1;
-                curx2 = v0.imageCoord.x() + (m2 * scanlineY) / SCALE;
-                drawFastTexturedHLine(curx1, curx2, v0.imageCoord.y() + scanlineY, bc, texShader);
+            int16_t x1Offs = 0, x2Offs = 0;
+            if ((m2 > m1)) {
+                for (; scanlineY < v1v0y; scanlineY++, x1Offs += m1, x2Offs += m2) {
+                    curx1 = v0.imageCoord.x() + x1Offs / SCALE;
+                    curx2 = v0.imageCoord.x() + x2Offs / SCALE;
+                    drawTexturedHLine(curx1, curx2, v0.imageCoord.y() + scanlineY, bc, texShader);
+                }
+            } else {
+                for (; scanlineY < v1v0y; scanlineY++, x1Offs += m1, x2Offs += m2) {
+                    curx1 = v0.imageCoord.x() + x1Offs / SCALE;
+                    curx2 = v0.imageCoord.x() + x2Offs / SCALE;
+                    drawTexturedHLine(curx2, curx1, v0.imageCoord.y() + scanlineY, bc, texShader);
+                }
             }
         }
 
         if (v2v1y) {
+            [[likely]];
             m1 = (v2.imageCoord.x() - v1.imageCoord.x()) * SCALE / v2v1y;
             b1 = (v1.imageCoord.x() - v0.imageCoord.x()) - (m1 * v1v0y) / SCALE;
-            // std::cout << "v1->v2 m: " << m1 << std::endl;
-            for (; scanlineY <= v2v0y; scanlineY++) {
-                curx1 = v0.imageCoord.x() + (m1 * scanlineY) / SCALE + b1;
-                curx2 = v0.imageCoord.x() + (m2 * scanlineY) / SCALE;
-                drawFastTexturedHLine(curx1, curx2, v0.imageCoord.y() + scanlineY, bc, texShader);
+            if ((m2 * scanlineY) > ((m1 * scanlineY) + b1 * SCALE)) {
+                for (; scanlineY <= v2v0y; scanlineY++) {
+                    curx1 = v0.imageCoord.x() + (m1 * scanlineY) / SCALE + b1;
+                    curx2 = v0.imageCoord.x() + (m2 * scanlineY) / SCALE;
+                    drawTexturedHLine(curx1, curx2, v0.imageCoord.y() + scanlineY, bc, texShader);
+                }
+            } else {
+                for (; scanlineY <= v2v0y; scanlineY++) {
+                    curx1 = v0.imageCoord.x() + (m1 * scanlineY) / SCALE + b1;
+                    curx2 = v0.imageCoord.x() + (m2 * scanlineY) / SCALE;
+                    drawTexturedHLine(curx2, curx1, v0.imageCoord.y() + scanlineY, bc, texShader);
+                }
             }
         }
     }
